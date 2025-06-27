@@ -239,13 +239,13 @@ var leti = 0.4;
 var lt_ = (lt * 100).toFixed(0);// Threshhold: from 1.75 to
 
 // Threshold of the percentage of the RF classification
-var MSRM_cos = MSRM.sin();
+var MSRM_sin = MSRM.sin();
 //Map.addLayer(MSRM, {}, "MSRM");
-//Map.addLayer(MSRM_cos, {}, "MSRM_cos");
+//Map.addLayer(MSRM_sin, {}, "MSRM_sin");
 
 var masked3 = MSRM.lt(lt).and(MSRM.gt(gt));
-var masked_add = MSRM_cos.lt(leti).and(MSRM_cos.gt(geti));
-var masked_add_ = MSRM_cos.lt(leti).and(MSRM_cos.gt(0));
+var masked_add = MSRM_sin.lt(leti).and(MSRM_sin.gt(geti));
+var masked_add_ = MSRM_sin.lt(leti).and(MSRM_sin.gt(0));
 
 var masked2 = masked3.updateMask(masked_add);
 var masked = masked2.updateMask(masked_add_);
