@@ -1,0 +1,388 @@
+
+
+// Based on:
+// JavaScript code to be implemented in Google Earth Engine(c) developed by H.A. Orengo
+// Orengo, H.A. and Petrie, C.A. 2018. 'Multi-Scale Relief Model (MSRM): a new algorithm
+// for the analysis of subtle topographic change in digital elevation models'
+// published in Earth Surface Processes and Landforms, 43(6): 1361-1369.
+
+//                ------------- ooo -------------
+
+// TO EXECUTE THE ALGORITHM PASTE THIS CODE INTO GOOGLE EARTH ENGINE CODE EDITOR AND PRESS 'Run'
+
+//                ------------- ooo -------------
+
+// For more information on how this algortihm works and how to apply them refer to the text of the 
+// article, which is freely available at: https://onlinelibrary.wiley.com/doi/full/10.1002/esp.4317
+// Suggestions and code improvementents are welcome! Please, contact Hector A. Orengo
+
+// NOTES, READ CAREFULLY!
+// 1. Visualisation parameters for each layer can be adjusted in the Layers dialogue in the map
+//    area of Goggle Earth Engine. This might be convenient when visualising at different scales.
+// 2. To apply these analyses in other areas simply change the 'geometry' variable and the
+//    'Map.setCenter' coordinates. These two parameters can be deleted. Doing so will apply the
+//    algorithms in whatever area is being displayed in the Google Earth Engine's Map area.
+//    However, if the geometry variable is eliminated it will need to be also deleted from the
+//    scripts incorporating it (for example when it is employed to clip the analysis area).
+//    The user can also draw his/her own polygon using the tool provided in the top left of Google
+//    Earth Engine’s map window. This will create a polygon named ‘geometry’ by default. The user
+//    can then delete the variables called ‘geometry’ and 'geometry_xprt' in (code lines 46-53 and
+//    59-66) and the analysis will be performed in the newly defined area. Make sure that you (1)
+//    create a second smaller area named 'geometry_xprt' to be used to clip the first polygon and
+//    avoid edge effects and (2) the central coordinates defined by 'Map.setCenter' (line 42) are
+//    also changed so the map window will zoom to these coordinates when executing the scripts. 
+// 3. The raster resulting from this script can be transferred to your Google Drive running the
+//    analysis from the 'task' tab on the top right of the screen.
+// 4. Specific instructions of how the algorithm works have been included within the code, please,
+//    read these carefully and consult the paper's text to understand how to best apply it.
+
+//                ------------- ooo -------------
+
+// Define your AOI as a polygon with a set of WGS84 coordinates
+
+// Define a central point in your study area (as X,Y WGS84 decimal degrees) and a scale,
+// just for visualisation purposes    
+
+
+
+// Geometry of the area (defined by WGS84 coordinate pairs) in which to perform the analysis
+// The user can define the coordinates of her/his AOI below.
+
+
+var ExpressPrompt = prompt("SELECT AOI: CFE2",'CFE2');
+
+var CFE2 = ee.Geometry.Polygon([ [ [ 44.402287189573357, 32.5973463779019 ], [ 45.029398241755445, 32.5973463779019 ], [ 45.029398241755445, 31.521965138177748 ], [ 44.402287189573357, 31.521965138177748 ], [ 44.402287189573357, 32.5973463779019 ] ] ] );
+
+
+if (ExpressPrompt == 'CFE2') {var geometry_xprt = CFE2; var AOI = 'CFE2'; var Lon = 44.7659; var Lat =  31.8987; var zoom = 11; var TANDEM = ee.Image("projects/ee-nazarbulawka/assets/CFE1_TDM1_EDEM_10_W84");}
+
+
+Map.setCenter(Lon, Lat, zoom);
+
+
+var geometry = geometry_xprt.buffer({'distance': 1500});
+
+
+// Below are the sources imported from GEE repository. The user could add her/his own
+// asssets or other sources available in GEE repository.
+var SRTM30 = ee.Image('USGS/SRTMGL1_003');
+var SRTM90 = ee.Image('CGIAR/SRTM90_V4');
+var ALOS30 = ee.Image('JAXA/ALOS/AW3D30_V1_1').select('AVE');
+var GLO30_ = ee.ImageCollection('projects/sat-io/open-datasets/GLO-30');
+var GLO30 = GLO30_.mosaic().setDefaultProjection('EPSG:3857',null,30);
+var fabdem_ = ee.ImageCollection("projects/sat-io/open-datasets/FABDEM");
+var fabdem = fabdem_.mosaic().setDefaultProjection('EPSG:3857',null,30);
+var NASADEM_ = ee.Image('NASA/NASADEM_HGT/001');
+var NASADEM = NASADEM_.select('elevation');
+
+//
+
+var ExpressPrompt = prompt('Select DEM from the list: SRTM90, SRTM30, ALOS30, GLO30, fabdem, NASADEM', 'TANDEM');
+
+if (ExpressPrompt == 'SRTM90') {var DEM = SRTM90; var expressName = 'SRTM90'}
+if (ExpressPrompt == 'SRTM30') {var DEM = SRTM30; var expressName = 'SRTM30'}
+if (ExpressPrompt == 'ALOS30') {var DEM = ALOS30; var expressName = 'ALOS30'}
+if (ExpressPrompt == 'GLO30') {var DEM = GLO30; var expressName = 'GLO30'}
+if (ExpressPrompt == 'fabdem') {var DEM = fabdem; var expressName = 'fabdem'}
+if (ExpressPrompt == 'TANDEM') {var DEM = TANDEM; var expressName = 'TanDEM-X'}
+if (ExpressPrompt == 'NASADEM') {var DEM = NASADEM; var expressName = 'NASADEM'}
+
+// Please, select the source you want to use from the list of variables above (ALOS30
+// selected by default).
+var DSM_ = DEM // Substitute for one of the previously defined DSMs or use your own
+  .clip(geometry); // The DSM is clipped using the extent of the AOI defined above.
+
+// The user will be asked about the size of the features s/he wants to detect and the
+// Scaling factor to use (please, refer to the text of the article for more information).
+
+var dem_ = DSM_;
+print(dem_);
+
+//// Define a boxcar or low-pass kernel.
+var boxcar = ee.Kernel.square({
+  radius: 14, units: 'pixels', magnitude: 1, normalize: true
+});
+
+//// Smooth the image by convolving with the boxcar kernel.
+var smooth = dem_.convolve(boxcar);
+var demdif = dem_.subtract(smooth);
+var l = -0.5;
+var g = 0.5;
+var clamped = demdif.clamp(l,g);
+var DSM = smooth.add(clamped);
+
+
+var fmax = prompt('What is maximum size of the feature you want to detect in meters?', 288);
+var fminPrmpt = prompt('What is minimum size of the feature you want to detect in meters?', 72);
+var x = prompt('Which scaling factor do you want to use?', 2);
+
+// The following line of code will extract the raster resolution (rr).
+var rr = Math.round((DSM.projection().nominalScale().getInfo())*1000) / 1000;
+print(rr)
+// The following lines of code will make sure that a minimum feature size is selected that
+// can be computed by the algorithm.
+if (fminPrmpt <= rr) {
+  var fmin = rr;
+} else {
+  var fmin = fminPrmpt;
+}
+
+// Output of information in the Console window.
+print('Maximun feature size',fmax,
+  'Minimun feature size',fmin,
+  'Raster resolution',rr,
+  'Scaling factor',x);
+
+// Calculation of 'i' and 'n' values and output of the results in the Console window.
+var i = Math.floor(Math.pow((fmin-rr)/(2*rr),1/x));
+print('value for i: index of the summation and the radius for the Low Pass ' +
+  'filter to be used in the generation of the initial surface to be employed', i);
+var n = Math.ceil(Math.pow((fmax-rr)/(2*rr),1/x));
+print('Value for n: ', n, 'Number of relief surfaces to be employed', n-i);
+
+// Creation of an array for the storage of the filtered surfaces.
+var arrayLP = [];
+
+// Variable for the output of information on the Low Pass filter radii.
+var LPrs = '';
+
+// Generation of filtered surfaces using a 'for' loop.
+for (var ndx = i; ndx <= n; ndx++) {
+  var boxcar = ee.Kernel.square({
+  radius: Math.pow(ndx,x), units: 'pixels', normalize: true});
+  var LP = DSM.convolve(boxcar);
+  LPrs = LPrs + '' + Math.pow(ndx,x) + ',';
+  arrayLP.push(LP);
+}
+
+// Output of information on the radii of the filtered surfaces generated.
+print('Low Pass filter radii to be employed', LPrs);
+
+// The array of filtered images is transformed in a multiband image.
+var compLP = ee.Image([arrayLP]);
+
+// Array for the storage of relief models resulting from the subtraction of consecutive
+// filtered surfaces.
+var arrayRM = [];
+
+// Subtraction of consecutive filtered surfaces for the creation of Relief Models.
+for (var ndx2 = 0; ndx2 < n-i; ndx2++) {
+  var RM = compLP.expression('((b1 - b2))', {
+      'b1': compLP.select(ndx2),
+      'b2': compLP.select(ndx2+1)
+  });
+  arrayRM.push(RM); // Addition of the Relief Models in the previously created array
+}
+
+// Average of the relief models.
+var MSRMraw = ee.Image([arrayRM])
+.reduce(ee.Reducer.mean())
+.clip(geometry_xprt); // The resulting raster is clipped using the clipping area defined above
+                      // to avoid an edge effect.
+
+// Reduction in the number of decimal places of the values of the resulting raster
+// This will not reduce noticeably the quality of the data but it will reduce significantly
+// the size of the resulting raster.
+var MSRM = ee.Image(0).expression(
+    'round(img * 1000) / 1000', {
+      'img': MSRMraw
+    });
+
+// Statistical data on the range of values of the resulting raster, which will
+// be used to strecth the MSRM.
+// Please, note these reducers are computationally intensive and the scale might need to be
+// increased for larger areas or rasters with higher resolution (he default provided equals
+// 4 times the raster size, rr*4). Scale level can also be reduced (up to the raster
+// resolution or 'rr') to increase the accuracy of the analysis but this will increase
+// processing time and GEE might run out of memory.
+var mean = MSRM.reduceRegion({
+      reducer: ee.Reducer.mean(),
+      geometry: geometry,
+      scale: rr*4,
+      bestEffort: true,
+      maxPixels: 1e9,
+      tileScale: 10
+  })
+  .get('mean');
+var sigma = MSRM.reduceRegion({
+      reducer: ee.Reducer.stdDev(),
+      geometry: geometry,
+      scale: rr*4,
+      bestEffort: true,
+      maxPixels: 1e9,
+      tileScale: 10
+  })
+  .get('mean');
+
+// Stretch with using the resulting stats to normalize the image so that 2*sigma fits
+// within [0:1].
+// Please, note that the exported MSRM is not stretched (so the user can employ her/
+// his preferred method).
+var MSRMstretch = ee.Image(0).expression(
+    '((img - mean) / (sigma * 2)) + 0.5', {
+      'img': MSRM,
+      'mean': ee.Image.constant(mean),
+      'sigma': ee.Image.constant(sigma)
+    });
+
+
+
+
+// Morphology filtering values
+var gt = 0.05
+var geti = -0.4
+var gt_ = (gt * 100).toFixed(0); 
+var lt = 2.5;
+var leti = 0.4;
+var lt_ = (lt * 100).toFixed(0);// Threshhold: from 1.75 to
+
+// Threshold of the percentage of the RF classification
+var MSRM_cos = MSRM.sin();
+//Map.addLayer(MSRM, {}, "MSRM");
+//Map.addLayer(MSRM_cos, {}, "MSRM_cos");
+
+var masked3 = MSRM.lt(lt).and(MSRM.gt(gt));
+var masked_add = MSRM_cos.lt(leti).and(MSRM_cos.gt(geti));
+var masked_add_ = MSRM_cos.lt(leti).and(MSRM_cos.gt(0));
+
+var masked2 = masked3.updateMask(masked_add);
+var masked = masked2.updateMask(masked_add_);
+//var masked_add = masked_add_.eq(0)                             // option 2
+//Map.addLayer(masked_add, {}, "MSRM * tanh");
+
+
+// Define functions
+// Function to remove single pixels
+
+var radius = 2;
+var removeSinglePixels = function(image) {
+  // Define a kernel for filtering
+  var kernel = ee.Kernel.square({
+    radius: radius,
+    units: 'pixels'
+  });
+
+  // Perform the majority filter to identify single pixels
+  var majority = image.reduceNeighborhood({
+    reducer: ee.Reducer.mode(),
+    kernel: kernel
+  });
+
+  // Remove single pixels by comparing the filtered image with the original image
+  var filteredImage = image.updateMask(majority.neq(image));
+
+  return majority;
+};
+
+/// Mask small areas Object based
+
+// Compute the number of pixels in each object defined by the "labels" band.
+var objectSize = masked
+  .connectedPixelCount({
+    maxSize: 128, eightConnected: false
+  });
+  
+//Map.addLayer(objectSize, {min: 0.5, max: 1, palette: "ffaf00,ff0000", opacity: 0.6}, 'OBC');
+  
+
+
+//Object-based detector block 
+
+var objectId = masked.connectedComponents({
+  connectedness: ee.Kernel.plus(1),
+  maxSize: 128
+});
+
+// Display the uniquely ID'ed objects to the Map.
+//Map.addLayer(objectId.randomVisualizer(), null, 'Objects');
+
+
+// Compute the number of pixels in each object defined by the "labels" band.
+var objectSize = objectId.select('labels')
+  .connectedPixelCount({
+    maxSize: 128, eightConnected: false
+  });
+
+// Display object pixel count to the Map.
+//Map.addLayer(objectSize, null, 'Object n pixels');
+
+
+// Get a pixel area image.
+var pixelArea = ee.Image.pixelArea();
+
+// Multiply pixel area by the number of pixels in an object to calculate
+// the object area. The result is an image where each pixel
+// of an object relates the area of the object in m^2.
+var objectArea = objectSize.multiply(pixelArea);
+
+// Threshold the `objectArea` image to define a mask that will mask out
+// objects below a given size (1 hectare in this case).
+var areaMask = objectArea.lte(150000);
+
+// Update the mask of the `objectId` layer defined previously using the
+// minimum area mask just defined.
+objectId = objectId.updateMask(areaMask);
+
+// Make a suitable image for `reduceConnectedComponents()` by adding a label
+// band to the `kelvin` temperature image.
+var Stats = masked.addBands(objectId.select('labels'));
+
+// Calculate the mean temperature per object defined by the previously added
+// "labels" band.
+var patchStats = Stats.reduceConnectedComponents({
+  reducer: ee.Reducer.mean(),
+  labelBand: 'labels'
+})
+
+var maskfinal_ = patchStats.eq(1);
+Map.addLayer(maskfinal_, {color: 'ff000d'}, 'maskfinal_');
+
+var maskfinal = maskfinal_.unmask(32767);
+
+Map.addLayer(maskfinal, {color: 'ff000d'}, 'maskfinal');
+
+print(maskfinal)// option 2
+var filteredpixels2 = masked.updateMask(maskfinal);
+
+// Apply the function to remove single pixels
+var filteredpixels = removeSinglePixels(filteredpixels2);
+
+
+
+// Reduce to vectors
+var vectors = filteredpixels2.reduceToVectors({
+  'geometry': geometry_xprt,
+  'crs': masked.projection(),
+  'scale': 48,
+  'geometryType': 'polygon',
+  'eightConnected': false,
+  'labelProperty': 'label',
+  'maxPixels': 9e12,
+  'bestEffort': true,
+})
+
+//// Filter vectors
+var results = ee.FeatureCollection(vectors).filter('label == 1');
+print(results);
+var iteration = '001'
+/// Export to drive
+Export.table.toDrive({
+  collection: results,
+  description:AOI+'_MSRM_'+expressName+'_'+ Math.round(x) + '_fmn' + Math.round(fmin) + '_fmx' + Math.round(fmax) + '_rr' + Math.round(rr) + 'm'+'_morph_'+gt_+'mm_'+lt_+'mm_'+'clean_'+radius,
+});
+
+Export.image.toDrive({
+  image: filteredpixels,
+  description:'pred_'+AOI+'_MSRM_'+expressName+'_'+ Math.round(x) + '_fmn' + Math.round(fmin) + '_fmx' + Math.round(fmax) + '_rr' + Math.round(rr) + 'm'+'_morph_'+gt_+'mm_'+lt_+'mm_'+'clean_'+radius,
+  scale: rr,
+  maxPixels: 9e12, 
+  region: geometry,
+});
+
+
+//// Add to display
+Map.addLayer(masked, {min: 0.5, max: 1, palette: "ffaf00,ff0000", opacity: 0.6}, 'Levee predictions' + iteration);
+Map.addLayer(filteredpixels, {}, "Levee classified");
+Map.addLayer(results, {color: 'ff000d'}, 'vectors');
+
+
