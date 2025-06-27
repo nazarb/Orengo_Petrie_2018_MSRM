@@ -232,10 +232,10 @@ var MSRMstretch = ee.Image(0).expression(
 
 // Morphology filtering values
 var gt = 0.05
-var geti = -0.4
+var gt_i = -0.4
 var gt_ = (gt * 100).toFixed(0); 
 var lt = 2.5;
-var leti = 0.4;
+var lt_i = 0.4;
 var lt_ = (lt * 100).toFixed(0);// Threshhold: from 1.75 to
 
 // Threshold of the percentage of the RF classification
@@ -244,8 +244,8 @@ var MSRM_sin = MSRM.sin();
 //Map.addLayer(MSRM_sin, {}, "MSRM_sin");
 
 var masked3 = MSRM.lt(lt).and(MSRM.gt(gt));
-var masked_add = MSRM_sin.lt(leti).and(MSRM_sin.gt(geti));
-var masked_add_ = MSRM_sin.lt(leti).and(MSRM_sin.gt(0));
+var masked_add = MSRM_sin.lt(lt_i).and(MSRM_sin.gt(gt_i));
+var masked_add_ = MSRM_sin.lt(lt_i).and(MSRM_sin.gt(0));
 
 var masked2 = masked3.updateMask(masked_add);
 var masked = masked2.updateMask(masked_add_);
